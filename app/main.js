@@ -1,7 +1,8 @@
-const {app, Menu, BrowserWindow, ipcMain: ipc} = require('electron')
-const Replay = require('./src/main/replay')(__dirname)
+const {app, shell, Menu, BrowserWindow, ipcMain: ipc, dialog} = require('electron')
 const Store = require('electron-store')
+const store = new Store()
 
+const Replay = require('./src/main/replay')(app,store)
 
 const path = require('path')
 const url  = require('url')
@@ -9,10 +10,15 @@ const url  = require('url')
 const WIN_WIDTH  = 256
 const WIN_HEIGHT = 224
 
-let win,
-    win_settings
 
-const store = new Store()
+let win, win_settings = null
+Replay.dir()
+
+if (!store.has('network.host_port')) { store.set('network.host_port',4848) }
+if (!store.has('network.join_host')) { store.set('network.join_host','192.168.0.0') }
+if (!store.has('network.join_port')) { store.set('network.join_port',4848) }
+
+// maybe move to inputs
 if (!store.has('inputs')){
   store.set('inputs',[
   38, //p0_up
@@ -42,7 +48,15 @@ const template = [
     submenu: [
       {click: click_settings('input')  , label: "Input"},
       {click: click_settings('network'), label: "Network"},
-      {click: click_settings('audio')  , label: "Audio"}
+      {click: click_settings('audio')  , label: "Audio"},
+      {click: click_settings('replay') , label: "Replay"}
+    ]
+  },
+  {
+    label: 'Debug',
+    submenu: [
+      {click: click_debug('main')      , label: "Inspector Main"},
+      {click: click_debug('settings')  , label: "Inspector Settings"}
     ]
   }
 ]
@@ -62,8 +76,31 @@ if (process.platform === 'darwin') {
 
 const menu  = Menu.buildFromTemplate(template)
 
-function click_settings(item, win, ev) {
+function click_debug(kind){
   return function(){
+    switch (kind) {
+      case 'main':
+        if (win !== null) {
+          win.webContents.openDevTools()
+        }
+        break
+      case 'settings':
+        if (win_settings !== null) {
+          win_settings.webContents.openDevTools()
+        }
+        break
+    }
+  }
+}
+
+function click_settings(mode) {
+  return function(item, win, ev){
+    if (win_settings !== null){
+      win_settings.custom = {mode: mode}
+      win_settings.webContents.send('reload',{mode: mode})
+      win_settings.show()
+      return
+    }
     win_settings = new BrowserWindow({
       title     : "Settings",
       width     : 500,
@@ -71,13 +108,16 @@ function click_settings(item, win, ev) {
       parent    : win,
       resizable: false
     })
+    win_settings.custom = {mode: mode}
     win_settings.loadURL(url.format({
       pathname: path.join(__dirname, 'src', 'settings.html'),
       protocol: 'file:',
       slashes: true
     }))
     win_settings.webContents.on('devtools-opened', () => {setImmediate(function() { win_settings.focus()})})
-    win_settings.webContents.openDevTools()
+    win_settings.on('closed', function () {
+      win_settings = null
+    })
   }
 }
 
@@ -95,45 +135,19 @@ function create_window () {
   win.loadURL(url.format({
     pathname: path.join(__dirname, 'src', 'index.html'),
     protocol: 'file:',
-    slashes: true
+    slashes: true,
+    icon: path.join(__dirname, 'src', 'assets', 'icons', 'png', '64x64.png')
   }))
   win.webContents.on('devtools-opened', () => {setImmediate(function() { win.focus()})})
-  win.webContents.openDevTools()
   win.on('closed', function () {
-    win = null
+    app.quit()
+    //win = null
   })
 }
 
 function ready(){
   Menu.setApplicationMenu(menu)
   create_window()
-
-  ipc.on('controls-update', (event) => {
-    win.webContents.send('controls-rebind')
-  })
-  ipc.on('replay-save', (event, {seed,inputs}) => {
-    Replay.save(`${Date.now()}`,seed,inputs,function(err,data){})
-  })
-  ipc.on('replay-load', (event) => {
-    Replay.last(function(err,name){
-      Replay.load(name,function(err,data){
-        win.webContents.send('replay-load',data)
-      })
-    })
-  })
-  ipc.on('play-vs', (event,{online,cpu}) => {
-    win.webContents.send('play-vs',{
-      seed:   Replay.random_seed(),
-      online: online,
-      cpu:    cpu
-    })
-  })
-
-  ipc.on('network-connect', (event,{mode,port,host}) => {
-    win.webContents.send('network-connect',{mode: mode, port: port, host: host})
-    win_settings.close()
-    win.focus()
-  })
 }
 
 
@@ -152,3 +166,67 @@ function activate(){
 app.on('ready'            , ready)
 app.on('window-all-closed', window_all_closed)
 app.on('activate'         , activate)
+
+ipc.on('controls-update', (event) => {
+  win.webContents.send('controls-rebind')
+})
+ipc.on('replay-dir-change', (event) => {
+  dialog.showOpenDialog(win_settings, {
+    properties: ['openDirectory']
+  },function(data){
+    if (data !== undefined && data !== null && data.length > 0){
+      let dir = Replay.dir('change',data[0])
+      win_settings.webContents.send('replay-dir',dir)
+    }
+  })
+})
+ipc.on('replay-list', (event) => {
+  Replay.list(function(err,files){
+    win_settings.webContents.send('replay-list',files)
+  })
+})
+ipc.on('replay-dir-reveal', (event) => {
+  let dir = Replay.dir()
+  shell.openItem(dir)
+})
+ipc.on('replay-dir-reset', (event) => {
+  let dir = Replay.dir('reset')
+  win_settings.webContents.send('replay-dir',dir)
+})
+ipc.on('replay-save', (event, {seed,inputs}) => {
+  Replay.save(`${Date.now()}`,seed,inputs,function(err,data){})
+})
+ipc.on('replay-delete', (event,name) => {
+  Replay.del(name)
+})
+ipc.on('replay-load', (event,name) => {
+  Replay.load(name,function(err,data){
+    win_settings.close()
+    win.focus()
+    win.webContents.send('replay-load',data)
+  })
+})
+ipc.on('play-vs', (event,{seed,online,cpu}) => {
+  console.log('seed_____:0',seed)
+  if (online){
+    seed = seed
+  } else {
+    seed = Replay.random_seed()
+  }
+  console.log('seed_____:1',seed)
+  win.webContents.send('play-vs',{
+    seed:   seed,
+    online: online,
+    cpu:    cpu
+  })
+})
+
+ipc.on('network-connect', (event,data) => {
+  win.webContents.send('network-connect',data)
+  win_settings.close()
+  win.focus()
+})
+
+ipc.on('settings', (event,name) => {
+  click_settings(name)()
+})

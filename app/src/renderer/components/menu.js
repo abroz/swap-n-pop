@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const {PUZZLE} = require(APP.path.core('data'))
   const ComponentMenuCursor = require(APP.path.components('menu_cursor'))(game)
   const {ipcRenderer: ipc} = require('electron')
@@ -31,21 +31,22 @@ module.exports = function(game){
       this.cursor.update()
     }
     mode_1p_vs_2p_local() {
-      ipc.send('play-vs',{online: false, cpu: false})
+      ipc.send('play-vs',{online: false, cpu: [false,false]})
     }
     mode_1p_vs_2p_online() {
-      game.state.start('connect',true,false,{mode: 'quick'})
+      ipc.send('settings','network')
     }
     mode_1p_vs_cpu() {
-      ipc.send('play-vs',{online: false, cpu: true})
+      ipc.send('play-vs',{online: false, cpu: [false,true]})
     }
     mode_improve() {
-      game.state.start('mode_puzzle',true,false,
-        PUZZLE.skill_chain_demo_2.demo_4
-      )
+      game.state.start('mode_puzzle',true,false,{
+        panels: PUZZLE.skill_chain_demo_2.demo_4,
+        cpu: [false,null]
+      })
     }
     mode_option() {
-      ipc.send('replay-load')
+      ipc.send('settings','replay')
     }
   };
 

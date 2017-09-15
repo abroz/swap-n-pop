@@ -1,4 +1,4 @@
-const APP = require('swap-n-pop_app')
+const APP = require('../../../../app')('../../../../')
 const fs   = require('fs')
 const chai = require('chai')
 const sinon = require('sinon')
@@ -18,7 +18,7 @@ const N = null
 
 var _playfield = null
 function load(...arr){
-  for (i of arr){ _playfield.stack(i[0], i[1]).deserialize(i) }
+  for (i of arr){ _playfield.stack(i[0], i[1]).load(i) }
 }
 
 describe('Panel', function() {
@@ -29,12 +29,12 @@ describe('Panel', function() {
     })
   })
 
-  describe('#deserialize()' ,function(){
-    it('should be able to deserialize', function(){
+  describe('#load()' ,function(){
+    it('should be able to load', function(){
       const data = [10,0,1,STATIC,     // x,y,kind,state
                     null,0,0,null,0] // chain,counter,counter_popping.animation_state,animation_counter
       const panel = new Panel()
-      panel.deserialize(data)
+      panel.load(data)
       panel.x.should.eql(10)
       panel.y.should.eql(0)
       panel.i.should.eql(1)
@@ -50,7 +50,7 @@ describe('Panel', function() {
       //panel.playfield = {
         //should_push: true
       //}
-      //panel.deserialize(data)
+      //panel.load(data)
       //panel.update(index)
       //panel.state.should.eql(FALL)
     //})
@@ -61,7 +61,7 @@ describe('Panel', function() {
     })
   })
 
-  describe.only('#clear_index' ,function(){
+  describe('#clear_index' ,function(){
     it('should work', function(){
       let stage = new Stage()
       stage.init({seed: 'test'})
@@ -103,6 +103,7 @@ describe('Panel', function() {
       stage.init({seed: 'test'})
       playfield = new Playfield(0)
       playfield.create(stage,{push: false, x: 0, y: 0, panels: panels})
+      playfield.clearing = []
       playfield.stack(0,9).check_neighbours(
         playfield.stack(0,9).above,
         playfield.stack(0,9).under, 0, false).should.eql([3,false])
@@ -131,6 +132,7 @@ describe('Panel', function() {
       stage.init({seed: 'test'})
       playfield = new Playfield(0)
       playfield.create(stage,{push: false, x: 0, y: 0, panels: panels})
+      playfield.clearing = []
       playfield.stack(1,9).chain_and_combo().should.eql([3,false])
     })
   })

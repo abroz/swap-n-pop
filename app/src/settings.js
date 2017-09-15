@@ -1,17 +1,24 @@
-const m = require('../node_modules/mithril/mithril.min.js')
-const {ipcRenderer: ipc} = require('electron')
+const m = require('./lib/mithril')
+const {remote,ipcRenderer: ipc} = require('electron')
 const Store = require('electron-store')
 const store = new Store()
 const keycode = require('keycode')
 
-var mode    = 'input'
+var mode = remote.getCurrentWindow().custom.mode
 
 //settings_network #####################
-var host_port = {value: 40001      , setValue: function(v) {host_port.value = v}}
-var join_host = {value: '127.0.0.1', setValue: function(v) {join_host.value = v}}
-var join_port = {value: 40001      , setValue: function(v) {join_port.value = v}}
+var inputs  = store.get('network.host_port')
+var host_port = {value: store.get('network.host_port'), setValue: function(v) {host_port.value = v}}
+var join_host = {value: store.get('network.join_host'), setValue: function(v) {join_host.value = v}}
+var join_port = {value: store.get('network.join_port'), setValue: function(v) {join_port.value = v}}
+
+ipc.on('reload',function(event,data){
+  mode = data.mode
+  m.redraw()
+})
 
 function submit_host(){
+  store.set('network.host_port',host_port.value)
   ipc.send('network-connect',{
     mode: 'host',
     host_port: host_port.value,
@@ -22,6 +29,8 @@ function submit_host(){
 }
 
 function submit_join(){
+  store.set('network.join_host',join_host.value)
+  store.set('network.join_port',join_port.value)
   ipc.send('network-connect',{
     mode: 'join',
     host_port: host_port.value,
@@ -61,14 +70,21 @@ function inputclass(key){
   }
 }
 
+function inputvalue(key){
+  const v = inputs[key]
+  if (typeof(v) === 'string' && (v.charAt(1) === 'A' || v.charAt(1) === 'P')){
+    return v
+  } else {
+    return keycode(v)
+  }
+}
+
 function textfield(key,label){
   return m('tr.text_field',[
     m('td.lbl',label),
-    m('td.val',m(".input",{ className: inputclass(key), onclick: setkey(key) }, keycode(inputs[key])))
+    m('td.val',m(".input",{ className: inputclass(key), onclick: setkey(key) }, inputvalue(key) ))
   ])
 }
-
-
 
 function settings_input(){
  return m('form',[
@@ -102,6 +118,16 @@ function settings_input(){
  ])
 }
 
+function storekey(v){
+  let i = inputs.indexOf(v)
+  if (i != -1) { inputs[i] = null}
+  inputs[setting] = v
+  store.set('inputs', inputs)
+  ipc.send('controls-update')
+  setting = null
+  m.redraw()
+}
+
 document.onclick = function (e) {
   if (setting != null && e.target.className != 'input setting') {
     setting = null
@@ -110,16 +136,155 @@ document.onclick = function (e) {
 
 document.onkeydown = function (e) {
   if (setting != null) {
-    let i = inputs.indexOf(e.keyCode)
-    if (i != -1) {
-      inputs[i] = null
-    }
-    inputs[setting] = e.keyCode
-    store.set('inputs', inputs)
-    ipc.send('controls-update')
-    setting = null
-    m.redraw()
+    storekey(e.keyCode)
   }
+}
+
+function poll_gamepad(){
+  if (setting === null){ return }
+  const gg = navigator.getGamepads()
+  if (gg[0] === null &&
+      gg[1] === null &&
+      gg[2] === null &&
+      gg[3] === null){ return }
+  for(let i = 0; i < gg.length; i++){
+    let gamepad = gg[i]
+    if (gamepad !== null) {
+      for (let ii = 0;  ii < gamepad.buttons.length; ii++) {
+        if (gamepad.buttons[ii].value === 1){
+          storekey(`${i}PAD${ii}`)
+        } // if
+      } // for
+
+      for (let ii = 0;  ii < gamepad.axes.length; ii++) {
+        let axis = null
+        if      (ii % 2 === 0) {
+          if     (gamepad.axes[ii]  ===  -1){ axis = 'L' }
+          else if(gamepad.axes[ii]  ===   1){ axis = 'R' }
+        }
+        else if (ii % 2 === 1) {
+          if     (gamepad.axes[ii]  ===  -1){ axis = 'U' }
+          else if(gamepad.axes[ii]  ===   1){ axis = 'D' }
+        }
+        if (axis !== null){
+          storekey(`${i}AXS${ii}${axis}`)
+        }
+      } // for
+
+    } // if
+  } // for
+}
+
+setInterval(function(){
+  poll_gamepad()
+},100)
+
+//settings_replay ######################
+let replay_files = []
+let replay_dir   = store.get('replay_dir')
+ipc.send('replay-list')
+ipc.on('replay-dir',function(event,dir){
+  replay_dir = dir
+  m.redraw()
+})
+ipc.on('replay-list',function(event,files){
+  replay_files = files
+  m.redraw()
+})
+
+function click_reveal_replay_dir(){
+  ipc.send('replay-dir-reveal')
+}
+function click_change_replay_dir(){
+  ipc.send('replay-dir-change')
+}
+function click_change_replay_dir(){
+  ipc.send('replay-dir-change')
+}
+function click_reset_replay_dir(){
+  ipc.send('replay-dir-reset')
+}
+function click_replay_play(file){
+  return function(){
+    ipc.send('replay-load',file)
+  }
+}
+function click_replay_remove(file){
+  return function(){
+    i = replay_files.indexOf(file)
+    replay_files.splice(i, 1)
+    ipc.send('replay-delete',file)
+  }
+}
+
+function settings_replay_items(){
+  let items = []
+  for (let file of replay_files){
+    items.push(m('tr.item',[
+      m('td.name', file),
+      m('td.date', ''),
+      m('td.actions',[
+        m('.button.small.replay.icon',{onclick: click_replay_play(file)}, [
+          m('span.fa.fa-play'),
+          m('span','Replay')
+        ]),
+        m('.button.small.delete',{onclick: click_replay_remove(file)}, [
+          m('span.fa.fa-trash-o')
+        ])
+      ])
+    ]))
+  }
+  return items
+}
+function settings_replay(){
+  return m('form',[
+    m('.text_field.replay_dir',[
+      m('label','Replay Folder Location:'),
+      m('.input',replay_dir),
+      m('.buttons',[
+        m('.button.reveal',{onclick: click_reveal_replay_dir},'Reveal'),
+        m('.button.change',{onclick: click_change_replay_dir},'Change'),
+        m('.button.reset' ,{onclick: click_reset_replay_dir },'Reset'),
+      ]),
+      m('.clear')
+    ]),
+    m('.data-table', m('table',settings_replay_items()))
+  ])
+}
+//settings_audio #######################
+audio_sfx_volume = 100
+audio_msx_volume = 100
+function settings_audio(){
+  return m('form',[
+    m('.check_box.sfx',[
+      m("input[type='range']",{
+        min:"0",
+        max:"100",
+        value: audio_sfx_volume,
+        oninput: function(e){
+         audio_sfx_volume = e.target.value
+        }
+      }),
+      m('.val',[
+        'Sound Effects: ',
+        audio_sfx_volume + '%'
+      ])
+    ]),
+    m('.check_box.msx',[
+      m("input[type='range']",{
+        min:"0",
+        max:"100",
+        value: audio_msx_volume,
+        oninput: function(e){
+         audio_msx_volume = e.target.value
+        }
+      }),
+      m('.val',[
+        'Music: ',
+        audio_msx_volume + '%'
+      ])
+    ])
+  ])
 }
 //######################################
 function class_tab(new_mode){
@@ -141,12 +306,15 @@ function nav(){
     m('.tab',{className: class_tab('input')  , onclick: click_tab('input')}  ,'Inputs'),
     m('.tab',{className: class_tab('network'), onclick: click_tab('network')},'Network'),
     m('.tab',{className: class_tab('audio')  , onclick: click_tab('audio')}  ,'Audio'),
+    m('.tab',{className: class_tab('replay') , onclick: click_tab('replay')}  ,'Replays'),
     m('.clear')
   ])
 }
 function content(){
-  if      (mode === 'input'){   return settings_input()}
-  else if (mode === 'network'){ return settings_network()}
+  if      (mode === 'input')  { return m('.content.settings_input'  ,settings_input()   )}
+  else if (mode === 'network'){ return m('.content.settings_network',settings_network() )}
+  else if (mode === 'audio')  { return m('.content.settings_audio'  ,settings_audio()   )}
+  else if (mode === 'replay') { return m('.content.settings_replay' ,settings_replay()  )}
 }
 
 const app = {view: function(){

@@ -1,4 +1,4 @@
-const APP = require('swap-n-pop_app')
+const APP = require('../app')('../')
 const {ipcRenderer: ipc} = require('electron')
 
 function attach_state(klass){
@@ -17,9 +17,11 @@ const game         = new Phaser.Game(WIN_WIDTH, WIN_HEIGHT, Phaser.AUTO, 'game')
 const States       = require(APP.path.root('src','renderer','states'))(game)
 const CoreControls = require(APP.path.core('controls'))(game)
 const CoreSounds   = require(APP.path.core('sounds'))(game)
+const Server = require(APP.path.main('server'))
 
 game.controls = new CoreControls()
 game.sounds   = new CoreSounds()
+game.server   = new Server()
 game.state.add('boot'       , attach_state(States.Boot))
 game.state.add('menu'       , attach_state(States.Menu))
 game.state.add('connect'    , attach_state(States.Connect))
@@ -35,7 +37,12 @@ ipc.on('play-vs', (event, {seed,online,cpu}) => {
   })
 })
 ipc.on('replay-load', (event, {seed,inputs}) => {
-  game.state.start('mode_vs',true,false, {seed: seed, inputs: inputs})
+  game.state.start('mode_vs',true,false, {
+    seed:   seed,
+    online: false,
+    inputs: inputs,
+    cpu: [false,false]
+  })
 })
 
 ipc.on('network-connect', (event, data) => {

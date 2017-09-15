@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const ComponentMenuPauseCursor = require(APP.path.components('menu_pause_cursor'))(game)
   class controller {
     constructor() {
@@ -21,26 +21,27 @@ module.exports = function(game){
       ]);
     }
     cancel() {
-      this.paused = false;
-      return game.state.start('menu');
+      this.paused = false
+      console.log('cancel')
+      game.state.start('menu')
     }
     contiune() {
-      this.paused         = false;
-      this.sprite.visible = false;
-      return this.playfield.stage.resume(this.playfield.pi);
+      this.paused         = false
+      this.sprite.visible = false
+      this.playfield.stage.resume(this.playfield.pi)
     }
     pause(pi){
       this.paused         = true;
       if (this.playfield.pi === pi) {
-        this.sprite.visible = true;
-        return this.cursor.map_controls();
+        this.sprite.visible = true
+        this.cursor.map_controls()
       } else {
-        return game.controls.map(this.playfield.pi, {}); //disable controls
+        game.controls.map(this.playfield.pi, {}); //disable controls
       }
     }
     update() {
       if (!this.paused) { return; }
-      return this.cursor.update();
+      this.cursor.update();
     }
   }
 

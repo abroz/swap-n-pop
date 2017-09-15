@@ -9,19 +9,18 @@ module.exports = function(game){
       this.lbl = game.add.text(0, 10, '0', {
         fontSize: '16px',
         fill: 0x000000
-      }
-      );
+      });
       this.lbl.y = 10;
       this.lbl.setTextBounds(50, 0, 46, 32);
       this.lbl.boundsAlignH = 'right';
       this.lbl.align        = 'right';
-      return this.lbl.lineSpacing  = -7;
+      this.lbl.lineSpacing  = -7;
     }
 
     update(chain,score){
       let text  = `${score}`;
       if (chain) { text += `\nchain: ${chain+1}`; }
-      return this.lbl.setText(text);
+      this.lbl.setText(text);
     }
   }
   return controller

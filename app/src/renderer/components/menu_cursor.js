@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const {UNIT, MENUCURSORBLINK} = require(APP.path.core('data'))
   class controller {
     constructor() {
@@ -23,8 +23,8 @@ module.exports = function(game){
       this.sprite = game.make.sprite(this.x, this.y+(this.index*UNIT), 'menu_cursor');
       this.menu.sprite.addChild(this.sprite);
 
-      this.map_controls(0);
-      this.map_controls(1);
+      this.map_controls(0)
+      this.map_controls(1)
     }
     map_controls(pi){
       return game.controls.map(pi, {
@@ -56,7 +56,7 @@ module.exports = function(game){
     confirm(tick) {
       if (tick > 0) { return }
       game.sounds.confirm()
-      return this.menu_items[this.index]();
+      return this.menu_items[this.index]()
     }
     cancel(tick) {
       if (tick > 0) { return }

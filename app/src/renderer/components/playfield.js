@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const _f = require(APP.path.core('filters'))
   const ComponentMenuPause          = require(APP.path.components('menu_pause'))(game)
   const ComponentPlayfieldCountdown = require(APP.path.components('playfield_countdown'))(game)
@@ -47,7 +47,8 @@ module.exports = function(game){
       this.render   = this.render.bind(this)
       this.shutdown = this.shutdown.bind(this)
 
-      this.get_data = this.get_data.bind(this);
+      this.load = this.load.bind(this)
+
       this.create_after = this.create_after.bind(this);
       this.create_stack = this.create_stack.bind(this);
       this.push = this.push.bind(this);
@@ -60,12 +61,9 @@ module.exports = function(game){
       this.update_stack = this.update_stack.bind(this);
       this.chain_and_combo = this.chain_and_combo.bind(this);
       this.swap = this.swap.bind(this);
+      this.danger = this.danger.bind(this);
       this.chain_over    = this.chain_over.bind(this);
-      this.is_danger     = this.is_danger.bind(this);
       this.update_push   = this.update_push.bind(this);
-      this.track_panel   = this.track_panel.bind(this);
-      this.track_tick    = this.track_tick.bind(this);
-      this.print_tick    = this.print_tick.bind(this);
       this.score_current = this.score_current.bind(this);
       this.render_stack  = this.render_stack.bind(this);
       this.stack         = this.stack.bind(this);
@@ -87,17 +85,31 @@ module.exports = function(game){
         throw(new Error('invalid query to stack'))
       }
     }
-    get_data() {
+    get snap() {
+      const snap_cursor = this.cursor.snap
+      const snap_stack  = []
+      for (let panel of this.stack()){
+        snap_stack.push(panel.snap)
+      }
       return [
-        this.running,this.score
-      ];
+        this.running,
+        snap_cursor,
+        snap_stack
+      ]
+    }
+    load(snapshot){
+      this.running = snapshot[0]
+      this.cursor.load(snapshot[1])
+      for (let i = 0; i < this.stack_len; i++) {
+        this.stack(i).load(snapshot[2][i])
+      }
     }
     create(stage,opts){
       if (stage === null) {
         throw new Error("must pass stage")
       }
       if (opts       === null ||
-          opts.x     === null | 
+          opts.x     === null ||
           opts.y     === null ||
           opts.panel === null){
         throw new Error("must pass at least x,y and panels")
@@ -130,8 +142,8 @@ module.exports = function(game){
       this.layer_cursor.x = this.x
       this.layer_cursor.y = this.y
 
-      this.countdown.create(this);
-      this.cursor.create(this, {ai: this.has_ai});
+      this.countdown.create(this)
+      this.cursor.create(this)
       if (this.has_ai) { this.ai.create(this, this.cursor) }
       this.menu_pause.create(this)
     }
@@ -149,11 +161,10 @@ module.exports = function(game){
     }
     push() {
       let i;
-      if (this.is_danger(0)) {
-        this.stage.game_over();
-        return 0;
+      if (this.danger(0)) {
+        this.stage.game_over()
+        return 0
       }
-      console.log('pushing')
 
       // move all panels up the stack
       const stack = new Array(this.stack_len)
@@ -194,11 +205,8 @@ module.exports = function(game){
       return this.cursor.map_controls();
     }
     game_over() {
-      let i, panel;
-      const is_dead = this.is_danger(0);
-      for (i = 0; i < this.stack_len; i++) { this.stack[i].check_dead(i, is_dead); }
-      this.running = false;
-      this.pushCounter = 0;
+      this.running = false
+      this.pushCounter = 0
     }
     create_panels(){
       const rows = (ROWS + (this.should_push === true ? 1 : 0 ))
@@ -260,7 +268,7 @@ module.exports = function(game){
       }
       return chain;
     }
-    is_danger(within){
+    danger(within){
       const offset = COLS*within;
       const cols   = [];
 
@@ -291,31 +299,6 @@ module.exports = function(game){
         this.score        += this.push()
       }
     }
-    track_panel(panel,name,v){
-      if ((this.tick >= 0) && (panel.newline() !== true)) {
-        const i = _f.xy2i(panel.x, panel.y);
-        if (!this.history) { this.history = {}; }
-        if (!this.history[`${this.tick}`]) { this.history[`${this.tick}`] = []; }
-        if (!this.history[`${this.tick}`][i]) { this.history[`${this.tick}`][i] = []; }
-        return this.history[`${this.tick}`][i].push(`${name}: ${v}`);
-      }
-    }
-
-    track_tick() {
-      if (!(this.tick >= 0)) { return this.tick = 0; }
-    }
-    print_tick(with_time){
-      if (with_time == null) { with_time = false; }
-      if (this.tick >= 0) {
-        if (with_time) {
-          console.log(`~ ${this.tick} ${Date.now()}`);
-        } else {
-          console.log(`~ ${this.tick}`);
-        }
-        return this.tick++;
-      }
-    }
-
     score_combo(combo){
       switch (combo) {
         case 4: return 20;
@@ -385,9 +368,10 @@ module.exports = function(game){
       this.score_lbl.update(this.chain, this.score)
 
       if (!this.running) { return; }
-      if (this.should_push) { this.update_push(); }
+
+      if (this.should_push) { this.update_push() }
       this.update_stack()
-      if (this.has_ai) { this.ai.update(); }
+      if (this.has_ai) { this.ai.update() }
       // combo n chain
       const cnc = this.chain_and_combo()
       this.score_current(cnc);

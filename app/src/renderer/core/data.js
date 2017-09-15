@@ -1,28 +1,32 @@
+const N = null
 module.exports = {
-  VERSION_MAJOR: 0,
-  VERSION_MINOR: 1,
-  VERSION_PATCH :0,
   PUZZLE: {
     test: [
-      null, null, 2, null, null, null,
-      null, null, 2, null, null, null,
-      null, null, 3, null, null, null,
-      null, null, 3, null, null, null,
-      null, null, 1, null, null, null,
-      null, null, 1, null, null, null,
-      null, null, 1, null, null, null,
-      null, null, 3, null, null, null,
-      null, null, 2, null, null, null
+      N, N, N, N, N, N,
+      N, N, N, N, N, N,
+      N, N, 2, N, N, N,
+      N, N, 2, N, N, N,
+      N, N, 3, N, N, N,
+      N, N, 3, N, N, N,
+      N, N, 1, N, N, N,
+      N, N, 1, N, N, N,
+      N, N, 1, N, N, N,
+      N, N, 3, N, N, N,
+      N, N, 2, N, N, N
     ],
     skill_chain_demo_2: {
       demo_4: [
-        null, null, 5, 2, 2, null,
-        null, null, 2, 5, 0, null,
-        null, null, 4, 2, 4, null,
-        null, 3   , 5, 2, 3, null,
-        null, 3   , 0, 4, 0, null,
-        null, 5   , 5, 3, 4, null,
-        2   , 3   , 2, 5, 3, 4
+        N, N, N, N, N, N,
+        N, N, N, N, N, N,
+        N, N, N, N, N, N,
+        N, N, N, N, N, N,
+        N, N, 5, 2, 2, N,
+        N, N, 2, 5, 0, N,
+        N, N, 4, 2, 4, N,
+        N, 3, 5, 2, 3, N,
+        N, 3, 0, 4, 0, N,
+        N, 5, 5, 3, 4, N,
+        2, 3, 2, 5, 3, 4
       ]
     }
   },
@@ -53,8 +57,8 @@ module.exports = {
 
   FRAME_LIVE    :  0,
   FRAME_DANGER  : [0,4,0,3,2,3],
-  FRAME_DEAD    : [5],
-  FRAME_NEWLINE :  1,
+  FRAME_DEAD    : 5,
+  FRAME_NEWLINE : 1,
 
   // Timing
   TIME_CLEAR : 60, //the time it takes before the first panel is ready to start popping

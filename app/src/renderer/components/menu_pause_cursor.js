@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const {UNIT} = require(APP.path.core('data'))
   class controller {
     constructor() {
@@ -32,17 +32,20 @@ module.exports = function(game){
       }
       );
     }
-    confirm() {
+    confirm(tick) {
+      if (tick > 0) { return }
       this.sfx_confirm.play();
       return this.menu_items[this.index]();
     }
-    up() {
+    up(tick) {
+      if (tick > 0) { return }
       if (this.index !== 0) {
         this.sfx_select.play();
         return this.index--;
       }
     }
-    down() {
+    down(tick) {
+      if (tick > 0) { return }
       if (this.index !== (this.menu_items.length-1)) {
         this.sfx_select.play();
         return this.index++;

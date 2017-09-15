@@ -5,6 +5,28 @@
 
 An online competitve TA/PdP/PPL clone.
 
+## Development
+
+There are two `package.json` files
+
+* `/package.json`     - responsible for packaging the app for distribution
+* `/app/package.json` - the app itself, run test suite, development
+
+To run the app locally in development:
+
+1.  `cd app`
+1. `npm install`
+1. `cd swap-n-pop_app`
+1. `npm test` (optional)
+1. `npm start`
+
+## Building Binary
+
+To build a binary for the filesystem you are on:
+
+1. `npm install`
+1. `npm dist`
+
 ## Project Tenets
 
 There's multiple TA/PdP/PPL clones in development but they did not
@@ -47,3 +69,4 @@ my preference to optimized my preferred workflow. But I decided its more
 important to forgo personal preferences and use what comes with whats
 supported with Chrome as long as doesn't put undue burden on
 development.
+

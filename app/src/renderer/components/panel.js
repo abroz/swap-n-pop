@@ -1,5 +1,5 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const blank = require(APP.path.components('panel_blank'))(game)
   const {
     UNIT,
@@ -62,7 +62,8 @@ module.exports = function(game){
       this.render   = this.render.bind(this)
       this.shutdown = this.shutdown.bind(this)
 
-      this.deserialize      = this.deserialize.bind(this);
+      this.load = this.load.bind(this)
+
       this.matched          = this.matched.bind(this);
       this.set              = this.set.bind(this)
       this.render_visible   = this.render_visible.bind(this)
@@ -72,7 +73,6 @@ module.exports = function(game){
       this.nocombo          = this.nocombo.bind(this)
       this.chain_and_combo  = this.chain_and_combo.bind(this)
       this.check_neighbours = this.check_neighbours.bind(this)
-      this.check_dead       = this.check_dead.bind(this)
     }
 
     static initClass() {
@@ -83,7 +83,7 @@ module.exports = function(game){
       this.prototype.sprite             = null;
       this.prototype.i                  = null;
     }
-    get serialize() {
+    get snap() {
       return [
         this.x,
         this.y,
@@ -93,7 +93,7 @@ module.exports = function(game){
         this.chain,
       ];
     }
-    deserialize(data){
+    load(data){
       this.x       = data[0]
       this.y       = data[1]
       this.kind    = data[2]
@@ -119,19 +119,19 @@ module.exports = function(game){
     get comboable() {  return this.clearable || (this.state === CLEAR && this.playfield.clearing.indexOf(this)) }
     get empty() {      return (this.counter === 0) && this.hidden }
     get hidden(){      return (this.kind === null) }
-    matched(i){
-      return ((this.left.kind  === i) && (this.right.kind  === i)) ||
-             ((this.above.kind === i) && (this.under.kind  === i)) ||
-             ((this.above.kind === i) && (this.above2.kind === i)) ||
-             ((this.under.kind === i) && (this.under2.kind === i)) ||
-             ((this.left.kind  === i) && (this.left2.kind  === i)) ||
-             ((this.right.kind === i) && (this.right2.kind === i))
+    matched(kind){
+      return ((this.left.kind  === kind) && (this.right.kind  === kind)) ||
+             ((this.above.kind === kind) && (this.under.kind  === kind)) ||
+             ((this.above.kind === kind) && (this.above2.kind === kind)) ||
+             ((this.under.kind === kind) && (this.under2.kind === kind)) ||
+             ((this.left.kind  === kind) && (this.left2.kind  === kind)) ||
+             ((this.right.kind === kind) && (this.right2.kind === kind))
     }
     set frame(i){ this.sprite.frame = (this.kind * 8) + i}
     set(i){
       switch (i) {
         case 'unique':
-          this.nocombo();
+          this.nocombo()
           break;
         default:
           this.kind = i
@@ -255,14 +255,20 @@ module.exports = function(game){
       this.counter = TIME_CLEAR + (TIME_POP*i) + TIME_FALL
     }
 
+    //should never generate 2 panels on top of each other
     nocombo() {
-      let values = ss.shuffle([0, 1, 2, 3, 4],this.playfield.stage.rng());
+      const arr = [0, 1, 2, 3, 4]
+      if (this.above.kind){ arr.splice(arr.indexOf(this.above.kind), 1)}
+      let values = ss.shuffle(arr,this.playfield.stage.rng())
       return this.i = values.find((i)=> {
         return this.matched(i) === false
       })
     }
     get danger(){
       return !this.playfield.stack(this.x,1).hidden
+    }
+    get dead(){
+      return !this.playfield.stack(this.x,0).hidden
     }
     get newline(){
       return this.playfield.should_push && this.y === (ROWS)
@@ -296,17 +302,11 @@ module.exports = function(game){
       if (middle[1] || panel1[1] || panel2[1]) { chain = true; }
       return [combo,chain]
     }
-    check_dead(i,is_dead){
-      const [x,y] = Array.from(_f.i2xy(i));
-      if (is_dead && (is_dead.indexOf(x) !== -1)) {
-        return this.play_dead();
-      } else {
-        return this.play_live();
-      }
-    }
+    // clear index is to determine what frame of clear frame we
+    // are on.
     get clear_index(){
       if (this.state !== CLEAR) {
-        throw(new Error('clear_index called on non CLEAR panel'))
+        throw(new Error('clear_index called on none CLEAR panel'))
       }
       let panels = []
       for (let p of this.playfield.stack()){
@@ -327,6 +327,8 @@ module.exports = function(game){
     animate(){
       if (this.newline) {
         this.frame = FRAME_NEWLINE
+      } else if (this.dead){
+        this.frame = FRAME_DEAD
       } else if (this.state === CLEAR){
         let [i,len] = this.clear_index
         let time_max = TIME_CLEAR + (TIME_POP*len) + TIME_FALL
@@ -350,6 +352,9 @@ module.exports = function(game){
         }
         this.frame = FRAME_LIVE
       } else if (this.danger){
+        // create a new state DANGER and using counter we can maybe
+        // make this deterministic.
+        //console.log(this.danger)
         //this.play_danger()
       } else {
         this.frame = FRAME_LIVE

@@ -1,7 +1,10 @@
 module.exports = function(game){
-  const APP = require('swap-n-pop_app')
+  const APP = require('../../../app')('../../../')
   const Stack  = require(APP.path.core('stack'))(game)
   const ComponentPlayfield = require(APP.path.components('playfield'))(game)
+  const ComponentPing      = require(APP.path.components('ping'))(game)
+  const CoreInputs         = require(APP.path.core('inputs'))(game)
+  const CoreSnapshots      = require(APP.path.core('snapshots'))(game)
   const {ipcRenderer: ipc} = require('electron')
   const seedrandom         = require('seedrandom')
 
@@ -13,18 +16,17 @@ module.exports = function(game){
       this.render   = this.render.bind(this)
       this.shutdown = this.shutdown.bind(this)
 
-      this.create_bg = this.create_bg.bind(this);
-      this.create_frame = this.create_frame.bind(this);
-      this.stage_music = this.stage_music.bind(this);
-      this.pause = this.pause.bind(this);
-      this.resume = this.resume.bind(this);
-      this.game_over = this.game_over.bind(this);
-      this.danger_check = this.danger_check.bind(this);
-      this.update_input = this.update_input.bind(this);
-      this.replay_input = this.replay_input.bind(this);
-      this.update_replay = this.update_replay.bind(this);
-      this.playfield1 = new ComponentPlayfield(0);
-      this.playfield2 = new ComponentPlayfield(1);
+      this.step         = this.step.bind(this)
+      this.roll         = this.roll.bind(this)
+      this.create_bg    = this.create_bg.bind(this)
+      this.create_frame = this.create_frame.bind(this)
+      this.pause        = this.pause.bind(this)
+      this.resume       = this.resume.bind(this)
+      this.game_over    = this.game_over.bind(this)
+      this.danger_check = this.danger_check.bind(this)
+      this.playfield1   = new ComponentPlayfield(0)
+      this.playfield2   = new ComponentPlayfield(1)
+      this.ping         = new ComponentPing()
     }
 
     static initClass() {
@@ -32,23 +34,21 @@ module.exports = function(game){
       this.prototype.debug = false
     }
     init(data){
-      this.tick   = -1
+      this.tick   = 0
       this.seed   = data.seed
+      this.cpu    = data.cpu
       this.online = data.online
       this.rng    = seedrandom(this.seed)
-
-      if (data.inputs) {
-        this.replay    = true
-        this.replaying = [null,null]
-        this.inputs    = data.inputs
-      } else {
-        this.replay = false
-        this.inputs = [
-          [[-1,0,'000000']],
-          [[-1,0,'000000']]
-        ]
-      }
+      this.inputs = new CoreInputs(data.inputs,data.online,this)
+      this.snapshots = new CoreSnapshots()
     }
+
+    get online(){  return this._online }
+    set online(v){ this._online = v }
+
+    get cpu(){  return this._cpu }
+    set cpu(v){ this._cpu = v }
+
     create_bg() {
       this.bg = game.add.sprite(-89,0, 'playfield_vs_bg');
     }
@@ -57,166 +57,110 @@ module.exports = function(game){
     }
     create() {
       game.stage.backgroundColor = 0x000000
-      this.state_music = 'none'
 
-      this.danger = false;
-      this.msx_stage_results  = game.add.audio('msx_stage_results');
-      this.msx_stage          = game.add.audio('msx_stage');
-      this.msx_stage_critical = game.add.audio('msx_stage_critical');
+      this.danger = false
 
       const offset = 0;
-      this.create_bg();
+      this.create_bg()
 
       const stack = new Stack(this.rng)
       stack.create()
 
-      this.playfield1.create(this, {push: true, x: offset+8  , y: 24, panels: stack.panels});
-      this.playfield2.create(this, {push: true, x: offset+152, y: 24, panels: stack.panels});
-      this.create_frame(offset);
-      this.playfield1.create_after();
-      this.playfield2.create_after();
-    }
-    stage_music(state){
-      return
-      switch (state) {
-        case 'pause':
-          switch (this.state_music) {
-            case 'active':
-              this.msx_stage.pause();
-              break;
-            case 'danger': 
-              this.msx_stage_critical.pause();
-              break;
-          }
-          break;
-        case 'resume':
-          switch (this.state_music) {
-            case 'active':
-              this.msx_stage.resume();
-              break;
-            case 'danger':
-              this.msx_stage_critical.resume();
-              break;
-          }
-          break;
-        case 'none':
-          this.state_music = state;
-          this.msx_stage.stop();
-          this.msx_stage_critical.stop();
-          this.msx_stage_results.stop();
-          break;
-        case 'active':
-          if (this.state_music != 'active') {
-            this.state_music = state;
-            this.msx_stage.play();
-            this.msx_stage_critical.stop();
-            this.msx_stage_results.stop();
-          }
-          break;
-        case 'danger':
-          if (this.state_music != 'danger') {
-            this.state_music = state;
-            this.msx_stage.stop();
-            this.msx_stage_critical.play();
-            this.msx_stage_results.stop();
-          }
-          break;
-        case 'results':
-          if (this.state_music != 'results') {
-            this.state_music = state;
-            this.msx_stage.stop();
-            this.msx_stage_critical.stop();
-            this.msx_stage_results.play();
-          }
-          break;
+      this.playfield1.create(this, {push: true, x: offset+8  , y: 24, panels: stack.panels})
+      this.playfield2.create(this, {push: true, x: offset+152, y: 24, panels: stack.panels})
+      this.create_frame(offset)
+      this.playfield1.create_after()
+      this.playfield2.create_after()
+
+      this.snapshots.create(
+        this.playfield1,
+        this.playfield2
+      )
+
+      if (this.online){
+        this.ping.create()
       }
     }
+
     pause(pi){
-      this.stage_music('pause')
+      game.sounds.stage_music('pause')
       this.playfield1.pause(pi)
       this.playfield2.pause(pi)
     }
     resume() {
-      this.stage_music('resume')
+      game.sounds.stage_music('resume')
       this.playfield1.resume()
       this.playfield2.resume()
     }
     game_over() {
-      ipc.send('replay-save', {seed: this.seed, inputs: this.inputs});
-      this.stage_music('results')
+      console.log('gameover')
+      if(!this.inputs.replay){
+        ipc.send('replay-save', {seed: this.seed, inputs: this.inputs.serialize});
+      }
+      game.sounds.stage_music('results')
       this.playfield1.game_over()
       this.playfield2.game_over()
     }
     danger_check() {
-      const d1 = this.playfield1.is_danger(1);
-      const d2 = this.playfield2.is_danger(2);
+      const d1 = this.playfield1.danger(1)
+      const d2 = this.playfield2.danger(2)
 
       if (d1 || d2) {
         if (this.danger === false) {
-          this.stage_music('danger');
+          game.sounds.stage_music('danger');
         }
         return this.danger = true;
       } else {
         if (this.danger === true) {
-          this.stage_music('active');
+          game.sounds.stage_music('active');
         }
         return this.danger = false
       }
     }
-    update_input(pi){
-      const bitset = game.controls.seralize(pi)
-      if (bitset === this.inputs[pi][this.inputs[pi].length-1][2]) {
-        this.inputs[pi][this.inputs[pi].length-1][1]++
-      } else {
-        this.inputs[pi].push([this.tick,0,bitset])
-      }
-    }
-    replay_input(pi){
-      if (this.replaying[pi] === null) {
-        this.replaying[pi] = this.inputs[pi].shift()
-      }
-
-      const tick   = this.replaying[pi][0]
-      const times  = this.replaying[pi][1]
-      const inputs = this.replaying[pi][2]
-
-      if ((tick+times) < this.tick){
-        while((tick+times) < this.tick){
-          this.replaying[pi] = this.inputs[pi].shift()
+    roll(from,to){
+      if (from > to) { // rollback
+        console.log('roll-backward',from,to)
+      } else { //rollforward
+        console.log('roll-forward',from,to)
+        this.snapshots.load(from)
+        for (let i = from; from > to; i++) {
+          this.update(i)
         }
-        console.log('+',this.tick,tick,times,inputs)
-        game.controls.execute(pi,inputs)
-      } else {
-        //console.log('~',this.tick,this.replaying[pi][0],this.replaying[pi][1],this.replaying[pi][2])
-      }
-    }
-    update_replay() {
-      if (this.replay){
-        this.replay_input(0)
-        this.replay_input(1)
-      } else {
-        this.update_input(0)
-        this.update_input(1)
       }
     }
     update() {
-      this.tick++;
+      this.step(false)
+    }
+    step(tick){
+      if (tick === false) { this.tick++ }
       game.controls.update()
       this.playfield1.update()
       this.playfield2.update()
       this.danger_check()
-      this.update_replay()
+      if (tick === false) {
+        this.inputs.update(this.tick,true)
+        this.snapshots.snap(this.tick)
+      } else {
+        this.inputs.update(tick,false)
+        this.snapshots.snap(tick)
+      }
     }
     render(){
       if(this.debug){
+        console.log('debugger triggered')
         debugger
       }
       if (this.playfield1) { this.playfield1.render() }
       if (this.playfield2) { this.playfield2.render() }
+      if (this.online){
+        this.ping.render()
+      }
     }
     shutdown() {
-      this.stage_music('none')
+      console.log('shutdown mode_vs')
+      game.sounds.stage_music('none')
       this.playfield1.shutdown()
+      this.playfield2.shutdown()
     }
   }
   controller.initClass()
